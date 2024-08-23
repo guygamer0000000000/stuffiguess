@@ -1,0 +1,299 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Debris = game:GetService("Debris")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local mouse = player:GetMouse()
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Keybinds
+local GRAPPLE_KEY = Enum.KeyCode.E
+local WALL_SCALE_KEY = Enum.KeyCode.Y
+local CLEAR_HOOKS_KEY = Enum.KeyCode.N  -- New keybind for clearing all hooks
+
+-- Configuration
+local hookSpeed = 300
+local maxHookDistance = 1000
+local pullForceMagnitude = 500
+local ropeThickness = 0.1
+local minHookDistance = 10
+local wallScalingSpeed = 50
+local closeDistance = 5  -- Distance to trigger GUI options
+local floatDuration = 3  -- Duration of floating after teleporting
+local floatHeight = 5    -- Height to float above the hook position
+
+-- Variables to keep track of the grapple state
+local activeHook
+local isGrappling = false
+local vectorForce
+local isScaling = false
+local connection
+local closeToHook = false
+local floatTween
+local guiButtonsConnected = false
+
+-- GUI Setup
+local function createGui()
+    local screenGui = Instance.new("ScreenGui", playerGui)
+    screenGui.Name = "GrappleOptionsGui"
+    screenGui.Enabled = false
+
+    local frame = Instance.new("Frame", screenGui)
+    frame.Size = UDim2.new(0, 200, 0, 200)  -- Increased size to fit the new button
+    frame.Position = UDim2.new(0.5, -100, 0.5, -100)
+    frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    frame.BackgroundTransparency = 0.5
+
+    local anchorButton = Instance.new("TextButton", frame)
+    anchorButton.Size = UDim2.new(1, 0, 0.25, 0)
+    anchorButton.Text = "Anchor"
+    anchorButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    anchorButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+    local floatButton = Instance.new("TextButton", frame)
+    floatButton.Size = UDim2.new(1, 0, 0.25, 0)
+    floatButton.Position = UDim2.new(0, 0, 0.25, 0)
+    floatButton.Text = "Teleport and Float"
+    floatButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    floatButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+    local unanchorButton = Instance.new("TextButton", frame)
+    unanchorButton.Size = UDim2.new(1, 0, 0.25, 0)
+    unanchorButton.Position = UDim2.new(0, 0, 0.5, 0)
+    unanchorButton.Text = "Unanchor"
+    unanchorButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    unanchorButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    unanchorButton.Visible = false -- Initially hidden until anchored
+
+    -- Clear Hooks Button
+    local clearHooksButton = Instance.new("TextButton", frame)
+    clearHooksButton.Size = UDim2.new(1, 0, 0.25, 0)
+    clearHooksButton.Position = UDim2.new(0, 0, 0.75, 0)
+    clearHooksButton.Text = "Clear All Hooks"
+    clearHooksButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    clearHooksButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+    return screenGui, anchorButton, floatButton, unanchorButton, clearHooksButton
+end
+
+local screenGui, anchorButton, floatButton, unanchorButton, clearHooksButton = createGui()
+
+-- Cleanup function to reset all grapple-related states
+local function resetGrapple()
+    isGrappling = false
+    closeToHook = false
+    isScaling = false
+    screenGui.Enabled = false
+    guiButtonsConnected = false
+
+    if connection then
+        connection:Disconnect()
+    end
+    if vectorForce then
+        vectorForce:Destroy()
+        vectorForce = nil
+    end
+    if activeHook then
+        activeHook:Destroy()
+        activeHook = nil
+    end
+    if floatTween then
+        floatTween:Cancel()
+    end
+end
+
+-- Function to activate the grapple hook
+local function fireGrappleHook()
+    if isGrappling then
+        resetGrapple()
+        return
+    end
+
+    local origin = character:FindFirstChild("HumanoidRootPart").Position
+    local targetPosition = mouse.Hit.Position
+    local unitDirection = (targetPosition - origin).Unit
+
+    -- Prevent firing hooks too close to the player
+    local distanceToTarget = (targetPosition - origin).Magnitude
+    if distanceToTarget < minHookDistance then
+        return
+    end
+
+    -- Create hook part
+    local hook = Instance.new("Part")
+    hook.Size = Vector3.new(0.5, 0.5, 0.5)
+    hook.Shape = Enum.PartType.Ball
+    hook.Material = Enum.Material.Metal
+    hook.BrickColor = BrickColor.new("Dark stone grey")
+    hook.CanCollide = false
+    hook.Anchored = true
+    hook.CFrame = CFrame.new(origin)
+    hook.Parent = workspace
+
+    -- Fire the hook using Tween for smooth movement
+    local hookTargetPosition = origin + (unitDirection * math.min(maxHookDistance, distanceToTarget))
+    local hookTweenInfo = TweenInfo.new(
+        (hookTargetPosition - origin).Magnitude / hookSpeed,
+        Enum.EasingStyle.Linear
+    )
+
+    local tween = TweenService:Create(hook, hookTweenInfo, {Position = hookTargetPosition})
+    tween:Play()
+
+    -- Raycast to detect collision
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {character}
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+    connection = RunService.Heartbeat:Connect(function()
+        local rayOrigin = hook.Position
+        local rayDirection = unitDirection * 1 -- Small increment
+
+        local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+        if result then
+            tween:Cancel()
+            hook.Position = result.Position
+            hook.Anchored = true
+
+            connection:Disconnect()
+
+            -- Create attachments
+            local hookAttachment = Instance.new("Attachment", hook)
+            local characterAttachment = Instance.new("Attachment", character:FindFirstChild("HumanoidRootPart"))
+
+            -- Create rope constraint
+            local rope = Instance.new("RopeConstraint")
+            rope.Attachment0 = hookAttachment
+            rope.Attachment1 = characterAttachment
+            rope.Length = (characterAttachment.Position - hook.Position).Magnitude
+            rope.Thickness = ropeThickness
+            rope.Visible = true
+            rope.Parent = hook
+
+            -- Apply force to pull the character
+            vectorForce = Instance.new("VectorForce")
+            vectorForce.Attachment0 = characterAttachment
+            vectorForce.Force = (hook.Position - characterAttachment.Position).Unit * pullForceMagnitude
+            vectorForce.RelativeTo = Enum.ActuatorRelativeTo.World
+            vectorForce.Parent = character:FindFirstChild("HumanoidRootPart")
+
+            -- Store the hook for later
+            activeHook = hook
+            isGrappling = true
+        end
+    end)
+end
+
+-- Function to clear all hooks
+local function clearAllHooks()
+    resetGrapple()
+end
+
+-- Function to handle GUI interactions
+local function handleGuiOptions()
+    if closeToHook and not guiButtonsConnected then
+        screenGui.Enabled = true
+        guiButtonsConnected = true
+        
+        anchorButton.MouseButton1Click:Connect(function()
+            -- Anchor the character at the current position
+            if vectorForce then vectorForce:Destroy() end
+            character:FindFirstChild("HumanoidRootPart").Anchored = true
+            screenGui.Enabled = false
+            unanchorButton.Visible = true
+        end)
+
+        floatButton.MouseButton1Click:Connect(function()
+            -- Destroy the hook and remove forces
+            resetGrapple()
+            
+            -- Teleport the character a few studs above the hook's position
+            local targetPosition = character:FindFirstChild("HumanoidRootPart").Position + Vector3.new(0, floatHeight, 0)
+            character:FindFirstChild("HumanoidRootPart").CFrame = CFrame.new(targetPosition)
+            character:FindFirstChild("HumanoidRootPart").Anchored = true
+
+            -- Float for a few seconds
+            local floatTweenInfo = TweenInfo.new(floatDuration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+            floatTween = TweenService:Create(character:FindFirstChild("HumanoidRootPart"), floatTweenInfo, {CFrame = CFrame.new(targetPosition + Vector3.new(0, floatHeight, 0))})
+            floatTween:Play()
+
+            floatTween.Completed:Connect(function()
+                character:FindFirstChild("HumanoidRootPart").Anchored = false
+            end)
+        end)
+
+        unanchorButton.MouseButton1Click:Connect(function()
+            -- Unanchor the character
+            character:FindFirstChild("HumanoidRootPart").Anchored = false
+            screenGui.Enabled = false
+            unanchorButton.Visible = false
+        end)
+
+        clearHooksButton.MouseButton1Click:Connect(function()
+            -- Clear all hooks
+            clearAllHooks()
+            screenGui.Enabled = false
+        end)
+    else
+        screenGui.Enabled = false
+    end
+end
+
+-- Function to handle key press
+local function onInputBegan(input, gameProcessed)
+    if gameProcessed then return end
+
+    if input.KeyCode == GRAPPLE_KEY then
+        fireGrappleHook()
+    elseif input.KeyCode == WALL_SCALE_KEY and isGrappling then
+        isScaling = true
+    elseif input.KeyCode == CLEAR_HOOKS_KEY then
+        clearAllHooks()  -- Clear all hooks when the N key is pressed
+    end
+end
+
+-- Function to handle key release
+local function onInputEnded(input)
+    if input.KeyCode == WALL_SCALE_KEY then
+        isScaling = false
+    end
+end
+
+-- Update the player position while scaling
+RunService.RenderStepped:Connect(function()
+    if isScaling and activeHook then
+        local hookPosition = activeHook.Position
+        local playerPosition = character:FindFirstChild("HumanoidRootPart").Position
+
+        local direction = (hookPosition - playerPosition).Unit
+        local distance = (hookPosition - playerPosition).Magnitude
+
+        if distance > closeDistance then
+            character:FindFirstChild("HumanoidRootPart").CFrame = character:FindFirstChild("HumanoidRootPart").CFrame + direction * wallScalingSpeed * RunService.RenderStepped:Wait()
+        else
+            closeToHook = true
+            handleGuiOptions()
+        end
+    end
+end)
+
+-- Input handling
+UserInputService.InputBegan:Connect(onInputBegan)
+UserInputService.InputEnded:Connect(onInputEnded)
+
+-- Reset the grapple when the character respawns
+local function onCharacterAdded(newCharacter)
+    character = newCharacter
+    resetGrapple()
+
+    -- Reconnect the character death event
+    character:WaitForChild("Humanoid").Died:Connect(resetGrapple)
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+
+-- Initial character death event connection
+character:WaitForChild("Humanoid").Died:Connect(resetGrapple
