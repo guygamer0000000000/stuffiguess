@@ -27,7 +27,6 @@ end
 
 local holdingE = false
 
--- Detect when the 'E' key is pressed
 UserInputService.InputBegan:Connect(function(input)
     if input.KeyCode == Enum.KeyCode.E then
         holdingE = true
@@ -55,7 +54,7 @@ UserInputService.InputBegan:Connect(function(input)
         if not Character:FindFirstChild("Torso") and not Character:FindFirstChild("UpperTorso") then
             game.StarterGui:SetCore("SendNotification", {
                 Title = "Can't dropkick!",
-                Text = "Must be R6 or R15",
+                Text = "Idk why lmao",
                 Duration = 3
             })
             return
@@ -98,7 +97,6 @@ UserInputService.InputBegan:Connect(function(input)
             task.wait()
         until (HumanoidRootPart.Position - TRootPart.Position).Magnitude < 5
 
-        -- Animation
         local anim = Instance.new("Animation")
         anim.AnimationId = dropkick_anim
         local track = Humanoid:LoadAnimation(anim)
@@ -112,7 +110,6 @@ UserInputService.InputBegan:Connect(function(input)
         track:AdjustSpeed(0)
         anim:Destroy()
 
-        -- Dropkick Movement
         Humanoid:MoveTo(TRootPart.Position)
         local connection = game:GetService('RunService').RenderStepped:Connect(function ()
             if not HumanoidRootPart then return end
@@ -126,10 +123,8 @@ UserInputService.InputBegan:Connect(function(input)
         task.wait(2)
         connection:Disconnect()
 
-        -- Remove message
         screenGui:Destroy()
 
-        -- Reset and Stop
         if not Humanoid then return end
 
         for _, Anim in pairs(Humanoid:GetPlayingAnimationTracks()) do
