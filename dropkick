@@ -1,0 +1,271 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local Player = Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local HumanoidRootPart = Character:FindFirstChild('HumanoidRootPart') or Character.PrimaryPart
+local Humanoid = Character:FindFirstChildOfClass('Humanoid') or Character:WaitForChild('Humanoid')
+
+local dropkick_anim = "rbxassetid://121896101322579"
+local stopped = false
+
+Player.CharacterAdded:Connect(function(char)
+    Character = char
+    HumanoidRootPart = char:FindFirstChild('HumanoidRootPart') or char.PrimaryPart
+    Humanoid = char:FindFirstChildOfClass('Humanoid') or char:WaitForChild('Humanoid')
+end)
+
+local function findPlayerFromCharacter(character)
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character == character then
+            return player
+        end
+    end
+    return nil
+end
+
+local holdingE = false
+
+-- Detect when the 'E' key is pressed
+UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.E then
+        holdingE = true
+    end
+end)
+
+-- Detect when the 'E' key is released
+UserInputService.InputEnded:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.E then
+        holdingE = false
+    end
+end)
+
+-- Detect mouse click
+UserInputService.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and holdingE then
+        local mouse = Player:GetMouse()
+        local targetCharacter = mouse.Target and mouse.Target.Parent
+
+        if not targetCharacter or not targetCharacter:FindFirstChildOfClass("Humanoid") then return end
+
+        local targetPlayer = findPlayerFromCharacter(targetCharacter)
+        if not targetPlayer then return end
+
+        if not Humanoid then return end
+
+        if not Character:FindFirstChild("Torso") and not Character:FindFirstChild("UpperTorso") then
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "Can't dropkick!",
+                Text = "Must be R6 or R15",
+                Duration = 3
+            })
+            return
+        end
+
+        -- Create and display message
+        local screenGui = Instance.new("ScreenGui", Player.PlayerGui)
+        local topLabel = Instance.new("TextLabel", screenGui)
+        local bottomLabel = Instance.new("TextLabel", screenGui)
+
+        topLabel.Text = "20-20-20"
+        topLabel.Size = UDim2.new(1, 0, 0, 50)
+        topLabel.Position = UDim2.new(0, 0, 0, 0)
+        topLabel.TextScaled = true
+        topLabel.BackgroundTransparency = 1
+        topLabel.TextColor3 = Color3.new(0, 0, 0)  -- Black text
+        topLabel.TextStrokeColor3 = Color3.new(1, 0, 0)  -- Red outline
+        topLabel.TextStrokeTransparency = 0.5
+
+        bottomLabel.Text = "DROPKICK"
+        bottomLabel.Size = UDim2.new(1, 0, 0, 50)
+        bottomLabel.Position = UDim2.new(0, 0, 1, -50)
+        bottomLabel.TextScaled = true
+        bottomLabel.BackgroundTransparency = 1
+        bottomLabel.TextColor3 = Color3.new(0, 0, 0)  -- Black text
+        bottomLabel.TextStrokeColor3 = Color3.new(1, 0, 0)  -- Red outline
+        bottomLabel.TextStrokeTransparency = 0.5
+
+        --// DROPKICK SIMULATION
+        print("Started dropkick.")
+
+        --// Running towards the target
+        local TCharacter = targetPlayer.Character
+        local TRootPart = TCharacter:FindFirstChild("HumanoidRootPart")
+
+        if not TRootPart then return end
+
+        Humanoid:MoveTo(TRootPart.Position)
+        Humanoid.WalkSpeed = 85
+
+        repeat
+            Humanoid:MoveTo(TRootPart.Position)
+            task.wait()
+        until (HumanoidRootPart.Position - TRootPart.Position).Magnitude < 5
+
+        -- Animation
+        local anim = Instance.new("Animation")
+        anim.AnimationId = dropkick_anim
+        local track = Humanoid:LoadAnimation(anim)
+
+        for _, Anim in pairs(Humanoid:GetPlayingAnimationTracks()) do
+            Anim:Stop()
+        end
+
+        track:Play()
+        track.TimePosition = 0.1
+        track:AdjustSpeed(0)
+        anim:Destroy()
+
+        -- Dropkick Movement
+        Humanoid:MoveTo(TRootPart.Position)
+        local connection = game:GetService('RunService').RenderStepped:Connect(function ()
+            if not HumanoidRootPart then return end
+
+            HumanoidRootPart.CFrame = CFrame.new(TRootPart.Position + Vector3.new(0, 1.75, 0) + (TRootPart.CFrame.LookVector * 2.4))
+            local lookAtCFrame = CFrame.lookAt(HumanoidRootPart.Position, TRootPart.Position)
+            HumanoidRootPart.CFrame = lookAtCFrame * CFrame.Angles(math.rad(115), math.rad(90), 0)
+            HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+        end)
+
+        task.wait(2)
+        connection:Disconnect()
+
+        -- Remove message
+        screenGui:Destroy()
+
+        -- Reset and Stop
+        if not Humanoid then return end
+
+        for _, Anim in pairs(Humanoid:GetPlayingAnimationTracks()) do
+            Anim:Stop()
+        end
+
+        HumanoidRootPart.CFrame = CFrame.new(HumanoidRootPart.Position, TRootPart.Position or nil)
+
+        Humanoid.Sit = true
+        task.wait(1.5)
+        Humanoid.Sit = false
+        Humanoid.WalkSpeed = 16
+        Humanoid.AutoRotate = true
+        Humanoid.JumpPower = 50
+    end
+end)
+
+Player.Chatted:Connect(function (msg)
+    local splitted = msg:split(" ")
+    local command = splitted[1]
+
+    if stopped then return end
+
+    if command == ".stopscript" then
+        stopped = true
+        pcall(function()
+            game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 16
+            game.Players.LocalPlayer.Character.Humanoid.AutoRotate = true
+            game.Players.LocalPlayer.Character.Humanoid.JumpPower = 50
+        end)
+        return
+    end
+
+    if command ~= ".dropkick" and command ~= ".dp" then
+        return
+    end
+
+    if not splitted[2] then return end
+
+    local targetuser = table.concat(splitted, " ", 2, #splitted)
+    local target = findPlayerFromCharacter(targetuser)
+
+    if not target then return end
+    if not target.Character then return end
+    if not Humanoid then return end
+
+    if not Character:FindFirstChild("Torso") and not Character:FindFirstChild("UpperTorso") then
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "Can't dropkick!",
+            Text = "Must be R6 or R15",
+            Duration = 3
+        })
+        return
+    end
+
+    local screenGui = Instance.new("ScreenGui", Player.PlayerGui)
+    local topLabel = Instance.new("TextLabel", screenGui)
+    local bottomLabel = Instance.new("TextLabel", screenGui)
+
+    topLabel.Text = "20-20-20"
+    topLabel.Size = UDim2.new(1, 0, 0, 50)
+    topLabel.Position = UDim2.new(0, 0, 0, 0)
+    topLabel.TextScaled = true
+    topLabel.BackgroundTransparency = 1
+    topLabel.TextColor3 = Color3.new(0, 0, 0)  -- Black text
+    topLabel.TextStrokeColor3 = Color3.new(1, 0, 0)  -- Red outline
+    topLabel.TextStrokeTransparency = 0.5
+
+    bottomLabel.Text = "DROPKICK"
+    bottomLabel.Size = UDim2.new(1, 0, 0, 50)
+    bottomLabel.Position = UDim2.new(0, 0, 1, -50)
+    bottomLabel.TextScaled = true
+    bottomLabel.BackgroundTransparency = 1
+    bottomLabel.TextColor3 = Color3.new(0, 0, 0)  -- Black text
+    bottomLabel.TextStrokeColor3 = Color3.new(1, 0, 0)  -- Red outline
+    bottomLabel.TextStrokeTransparency = 0.5
+
+    print("Started dropkick.")
+
+    local TCharacter = target.Character
+    local TRootPart = TCharacter:FindFirstChild("HumanoidRootPart")
+
+    if not TRootPart then return end
+
+    Humanoid:MoveTo(TRootPart.Position)
+    Humanoid.WalkSpeed = 85
+
+    repeat
+        Humanoid.WalkSpeed = 85
+        Humanoid:MoveTo(TRootPart.Position)
+        task.wait()
+    until (HumanoidRootPart.Position - TRootPart.Position).Magnitude < 5
+
+    local anim = Instance.new("Animation")
+    anim.AnimationId = dropkick_anim
+    local track = Humanoid:LoadAnimation(anim)
+
+    for _, Anim in pairs(Humanoid:GetPlayingAnimationTracks()) do
+        Anim:Stop()
+    end
+
+    track:Play()
+    track.TimePosition = 0.1
+    track:AdjustSpeed(0)
+    anim:Destroy()
+
+    Humanoid:MoveTo(TRootPart.Position)
+    local connection = game:GetService('RunService').RenderStepped:Connect(function ()
+        if not HumanoidRootPart then return end
+
+        HumanoidRootPart.CFrame = CFrame.new(TRootPart.Position + Vector3.new(0, 1.75, 0) + (TRootPart.CFrame.LookVector * 2.4))
+        local lookAtCFrame = CFrame.lookAt(HumanoidRootPart.Position, TRootPart.Position)
+        HumanoidRootPart.CFrame = lookAtCFrame * CFrame.Angles(math.rad(115), math.rad(90), 0)
+        HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+    end)
+
+    task.wait(2)
+    connection:Disconnect()
+
+    screenGui:Destroy()
+
+    if not Humanoid then return end
+
+    for _, Anim in pairs(Humanoid:GetPlayingAnimationTracks()) do
+        Anim:Stop()
+    end
+
+    HumanoidRootPart.CFrame = CFrame.new(HumanoidRootPart.Position, TRootPart.Position or nil)
+
+    Humanoid.Sit = true
+    task.wait(1.5)
+    Humanoid.Sit = false
+    Humanoid.WalkSpeed = 16
+    Humanoid.AutoRotate = true
+    Humanoid.JumpPower = 50
+end)
