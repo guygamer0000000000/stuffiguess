@@ -1,3 +1,5 @@
+---this script kinda also sucks on some games but at least it works
+
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local Player = Players.LocalPlayer
@@ -32,14 +34,12 @@ UserInputService.InputBegan:Connect(function(input)
     end
 end)
 
--- Detect when the 'E' key is released
 UserInputService.InputEnded:Connect(function(input)
     if input.KeyCode == Enum.KeyCode.E then
         holdingE = false
     end
 end)
 
--- Detect mouse click
 UserInputService.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 and holdingE then
         local mouse = Player:GetMouse()
@@ -61,7 +61,6 @@ UserInputService.InputBegan:Connect(function(input)
             return
         end
 
-        -- Create and display message
         local screenGui = Instance.new("ScreenGui", Player.PlayerGui)
         local topLabel = Instance.new("TextLabel", screenGui)
         local bottomLabel = Instance.new("TextLabel", screenGui)
@@ -84,10 +83,8 @@ UserInputService.InputBegan:Connect(function(input)
         bottomLabel.TextStrokeColor3 = Color3.new(1, 0, 0)  -- Red outline
         bottomLabel.TextStrokeTransparency = 0.5
 
-        --// DROPKICK SIMULATION
         print("Started dropkick.")
 
-        --// Running towards the target
         local TCharacter = targetPlayer.Character
         local TRootPart = TCharacter:FindFirstChild("HumanoidRootPart")
 
